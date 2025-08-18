@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Stream Player</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .message {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: white;
+            font-family: sans-serif;
+            font-size: 1.5em;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        try {
+            // Get the current page's URL
+            const url = new URL(window.location.href);
+            
+            // Get the 'stream' parameter from the URL
+            const streamUrl = url.searchParams.get("stream");
+
+            if (streamUrl) {
+                // Decode the stream URL (it will be encoded)
+                const decodedUrl = atob(streamUrl); // Base64 decoding
+
+                // Create the iframe with the no-referrer policy
+                document.write(
+                    `<iframe 
+                        src="${decodedUrl}" 
+                        allow="autoplay; encrypted-media"
+                        allowfullscreen="true" 
+                        referrerpolicy="no-referrer">
+                    </iframe>`
+                );
+            } else {
+                document.write(`<div class="message">No stream URL provided.</div>`);
+            }
+        } catch (e) {
+            document.write(`<div class="message">Error: Invalid stream URL.</div>`);
+        }
+    </script>
+</body>
+</html>
