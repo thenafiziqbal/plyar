@@ -3,114 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Live Player</title>
+    <title>Ultimate Live Player v3</title>
     <!-- Plyr.io স্টাইলশীট -->
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-            background-color: #000;
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            height: 100%; 
+            width: 100%; 
+            overflow: hidden; 
+            background-color: #000; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
         }
-        #player-container, #iframe-container {
-            width: 100%;
-            height: 100%;
+        #container { 
+            width: 100%; 
+            height: 100%; 
         }
-        iframe {
-            border: 0;
-            width: 100%;
-            height: 100%;
+        iframe { 
+            border: 0; 
+            width: 100%; 
+            height: 100%; 
         }
-        #message {
-            color: white;
-            font-size: 1.5em;
+        #message { 
+            color: #ccc; 
+            font-size: 1.2em; 
+            text-align: center; 
+            padding: 20px; 
+        }
+        .plyr--video { 
+            height: 100%; 
+            width: 100%; 
         }
     </style>
 </head>
 <body>
 
-    <div id="player-container" style="display: none;">
-        <video id="player" playsinline controls></video>
+    <div id="container">
+        <!-- প্লেয়ার বা iframe এখানে ডাইনামিকভাবে যোগ করা হবে -->
     </div>
-
-    <div id="iframe-container" style="display: none;">
-        <!-- iframe এখানে ডাইনামিকভাবে যোগ করা হবে -->
-    </div>
-
-    <div id="message">Loading stream...</div>
-
-    <!-- Plyr.io এবং HLS.js স্ক্রিপ্ট -->
+    
+    <!-- প্রয়োজনীয় জাভাস্ক্রিপ্ট লাইব্রেরি -->
     <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
     <script>
-        // Base64 ডিকোড করার ফাংশন
-        function b64Decode(str) {
-            return decodeURIComponent(atob(str).split('').map(function(c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
+        // Base64 ডিকোড করার একটি নিরাপদ ফাংশন যা ত্রুটি হ্যান্ডেল করতে পারে
+        function safeB64Decode(str) {
+            try {
+                // UTF-8 ক্যারেক্টার সঠিকভাবে ডিকোড করার জন্য
+                return decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            } catch (e) {
+                console.error("Base64 decoding failed:", e);
+                return null;
+            }
         }
 
+        // URL থেকে প্যারামিটার পাওয়ার জন্য
+        const urlParams = new URLSearchParams(window.location.search);
+        const encodedSrc = urlParams.get('src'); // সরাসরি m3u8 লিঙ্কের জন্য
+        const encodedIframeSrc = urlParams.get('iframe_src'); // iframe লিঙ্কের জন্য
+
+        const container = document.getElementById('container');
+
+        // ব্যবহারকারীকে মেসেজ দেখানোর জন্য একটি ফাংশন
+        function showMessage(htmlContent) {
+            container.innerHTML = `<div id="message">${htmlContent}</div>`;
+        }
+        
+        // --- মূল যুক্তি ---
         document.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const srcParam = urlParams.get('src'); // .m3u8 লিঙ্কের জন্য
-            const iframeSrcParam = urlParams.get('iframe_src'); // iframe লিঙ্কের জন্য
-
-            const messageDiv = document.getElementById('message');
-            const playerContainer = document.getElementById('player-container');
-            const iframeContainer = document.getElementById('iframe-container');
-
-            try {
-                if (srcParam) {
-                    // এটি একটি সরাসরি ভিডিও স্ট্রিম (m3u8)
-                    const source = b64Decode(srcParam);
-                    messageDiv.style.display = 'none';
-                    playerContainer.style.display = 'block';
-
+            if (encodedSrc) {
+                // --- .m3u8 লিঙ্ক চালানোর যুক্তি ---
+                const source = safeB64Decode(encodedSrc);
+                if (source) {
+                    container.innerHTML = `<video id="player" playsinline controls></video>`;
                     const video = document.getElementById('player');
-                    
+
                     if (Hls.isSupported()) {
-                        const hls = new Hls();
+                        const hls = new Hls({
+                            // নেটওয়ার্ক বা মিডিয়া সম্পর্কিত ত্রুটি হলে hls.js রিকভার করার চেষ্টা করবে
+                             enableWorker: true,
+                             fragLoadingMaxRetry: 4,
+                             manifestLoadingMaxRetry: 2,
+                        });
                         hls.loadSource(source);
                         hls.attachMedia(video);
-                        window.hls = hls;
+                        // HLS.js-এর জন্য উন্নত ত্রুটি ব্যবস্থাপনা
+                        hls.on(Hls.Events.ERROR, function (event, data) {
+                            if (data.fatal) {
+                                console.error('Fatal HLS Error:', data);
+                                switch(data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        showMessage(`Error loading video stream.<br>Details: ${data.details}. Please check the link and your connection.`);
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        showMessage(`Error with video content.<br>This stream might be corrupted or unsupported.`);
+                                        hls.recoverMediaError();
+                                        break;
+                                    default:
+                                        showMessage(`An unknown error occurred while loading the video.`);
+                                        break;
+                                }
+                            }
+                        });
                     }
-                    
-                    const player = new Plyr(video, {
-                        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
-                        autoplay: true
-                    });
-                    window.player = player;
+                    // Plyr.io প্লেয়ার চালু করা
+                    const player = new Plyr(video, { autoplay: true });
+                } else {
+                    showMessage('Error: Invalid video source link. Could not decode.');
+                }
 
-                } else if (iframeSrcParam) {
-                    // এটি একটি iframe লিঙ্ক
-                    const iframeSrc = b64Decode(iframeSrcParam);
-                    messageDiv.style.display = 'none';
-                    iframeContainer.style.display = 'block';
-
+            } else if (encodedIframeSrc) {
+                // --- iFrame লিঙ্ক চালানোর যুক্তি ---
+                const iframeSrc = safeB64Decode(encodedIframeSrc);
+                if (iframeSrc) {
                     const iframe = document.createElement('iframe');
                     iframe.src = iframeSrc;
-                    iframe.setAttribute('allow', 'autoplay; encrypted-media');
-                    iframe.setAttribute('allowfullscreen', '');
-                    iframe.setAttribute('frameborder', '0');
-                    // স্যান্ডবক্স অ্যাট্রিবিউট বিজ্ঞাপন এবং পপ-আপ কমাতে সাহায্য করে
-                    iframe.setAttribute('sandbox', 'allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation');
+                    iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+                    iframe.setAttribute('allowfullscreen', 'true');
                     
-                    iframeContainer.appendChild(iframe);
-
+                    // **সবচেয়ে গুরুত্বপূর্ণ ফিচার:** Referrer Policy
+                    // এটি স্ট্রিমিং সার্ভারকে জানতে দেয় না যে অনুরোধটি কোথা থেকে আসছে, যা ব্লক হওয়া থেকে বাঁচায়।
+                    iframe.setAttribute('referrerpolicy', 'no-referrer'); 
+                    
+                    // **সবচেয়ে শক্তিশালী স্যান্ডবক্স:**
+                    // এটি নিরাপত্তা দেয় কিন্তু fullscreen, pop-up এবং স্ক্রিপ্টের মতো প্রয়োজনীয় জিনিসগুলোকেও কাজ করতে দেয়।
+                    iframe.setAttribute('sandbox', 'allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation allow-presentation allow-popups');
+                    
+                    container.appendChild(iframe);
                 } else {
-                    messageDiv.textContent = 'No stream source found. Please provide a "src" or "iframe_src" parameter.';
+                    showMessage('Error: Invalid iframe source link. Could not decode.');
                 }
-            } catch (e) {
-                console.error("Error decoding or loading stream:", e);
-                messageDiv.textContent = 'Error: Could not load the stream. The link might be invalid or malformed.';
+
+            } else {
+                showMessage('No stream source found.<br>Please provide a "src" or "iframe_src" parameter in the URL.');
             }
         });
     </script>
