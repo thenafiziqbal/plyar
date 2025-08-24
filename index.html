@@ -1,61 +1,162 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="bn">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Stream Player</title>
+    <title>Advanced Live Stream Player</title>
     <style>
+        /* বেসিক স্টাইল */
         body, html {
             margin: 0;
             padding: 0;
             height: 100%;
             overflow: hidden;
             background-color: #000;
+            font-family: sans-serif;
+            color: white;
         }
-        iframe {
+        /* প্লেয়ারের কন্টেইনার */
+        #player-container {
+            position: relative;
             width: 100%;
             height: 100%;
-            border: none;
         }
-        .message {
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        /* ভিডিও ট্যাগ */
+        #video {
+            width: 100%;
             height: 100%;
-            color: white;
-            font-family: sans-serif;
-            font-size: 1.5em;
+        }
+        /* কাস্টম লোগো */
+        #logo-watermark {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            max-width: 120px;
+            max-height: 50px;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+            pointer-events: none; /* লোগোর উপর ক্লিক যেন কাজ না করে */
+        }
+        #player-container:hover #logo-watermark {
+            opacity: 1;
+        }
+        /* লোডিং স্পিনার */
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        /* ত্রুটি বার্তা */
+        #error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            display: none; /* ডিফল্টভাবে লুকানো থাকবে */
+            text-align: center;
         }
     </style>
+    <!-- HLS.js লাইব্রেরি -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
+
+    <div id="player-container">
+        <div id="loader"></div>
+        <video id="video" controls autoplay muted poster=""></video>
+        <img id="logo-watermark" src="" alt="Logo">
+        <div id="error-message">
+            <h3>স্ট্রিমটি চালাতে সমস্যা হচ্ছে।</h3>
+            <p>অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।</p>
+        </div>
+    </div>
+
     <script>
-        try {
-            // Get the current page's URL
-            const url = new URL(window.location.href);
-            
-            // Get the 'stream' parameter from the URL
-            const streamUrl = url.searchParams.get("stream");
+        document.addEventListener('DOMContentLoaded', () => {
+            const video = document.getElementById('video');
+            const loader = document.getElementById('loader');
+            const errorMessage = document.getElementById('error-message');
+            const logo = document.getElementById('logo-watermark');
 
-            if (streamUrl) {
-                // Decode the stream URL (it will be encoded)
-                const decodedUrl = atob(streamUrl); // Base64 decoding
+            // URL থেকে প্যারামিটারগুলো নেওয়া
+            const urlParams = new URLSearchParams(window.location.search);
+            const streamUrl = urlParams.get('stream'); // M3U8 লিঙ্ক
+            const posterUrl = urlParams.get('poster'); // পোস্টার ইমেজ লিঙ্ক
+            const logoUrl = urlParams.get('logo');     // লোগো ইমেজ লিঙ্ক
 
-                // Create the iframe with the no-referrer policy
-                document.write(
-                    `<iframe 
-                        src="${decodedUrl}" 
-                        allow="autoplay; encrypted-media"
-                        allowfullscreen="true" 
-                        referrerpolicy="no-referrer">
-                    </iframe>`
-                );
-            } else {
-                document.write(`<div class="message">No stream URL provided.</div>`);
+            // পোস্টার সেট করা
+            if (posterUrl) {
+                video.poster = posterUrl;
             }
-        } catch (e) {
-            document.write(`<div class="message">Error: Invalid stream URL.</div>`);
-        }
+
+            // লোগো সেট করা
+            if (logoUrl) {
+                logo.src = logoUrl;
+                logo.style.display = 'block';
+            } else {
+                logo.style.display = 'none';
+            }
+
+            if (!streamUrl) {
+                loader.style.display = 'none';
+                errorMessage.style.display = 'block';
+                errorMessage.querySelector('h3').innerText = 'স্ট্রিমের লিঙ্ক পাওয়া যায়নি।';
+                errorMessage.querySelector('p').innerText = "URL-এ '?stream=' প্যারামিটার যোগ করুন।";
+                return;
+            }
+
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(streamUrl);
+                hls.attachMedia(video);
+
+                // যখন ভিডিও চলা শুরু হবে
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {
+                        console.log("Autoplay was prevented.");
+                    });
+                });
+                
+                video.onplaying = () => {
+                    loader.style.display = 'none';
+                };
+
+                // কোনো ত্রুটি ঘটলে
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        loader.style.display = 'none';
+                        errorMessage.style.display = 'block';
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = streamUrl;
+                video.addEventListener('loadedmetadata', () => {
+                    video.play();
+                });
+                video.onplaying = () => {
+                    loader.style.display = 'none';
+                };
+            } else {
+                loader.style.display = 'none';
+                errorMessage.style.display = 'block';
+                errorMessage.querySelector('h3').innerText = 'ব্রাউজার সমর্থিত নয়।';
+            }
+        });
     </script>
 </body>
 </html>
