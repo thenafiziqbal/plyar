@@ -3,58 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultimate Live Player v3</title>
-    <!-- Plyr.io স্টাইলশীট -->
+    <title>Ultimate Live Player v4 - Powered-up</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
-        body, html { 
-            margin: 0; 
-            padding: 0; 
-            height: 100%; 
-            width: 100%; 
-            overflow: hidden; 
-            background-color: #000; 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-        }
-        #container { 
-            width: 100%; 
-            height: 100%; 
-        }
-        iframe { 
-            border: 0; 
-            width: 100%; 
-            height: 100%; 
-        }
-        #message { 
-            color: #ccc; 
-            font-size: 1.2em; 
-            text-align: center; 
-            padding: 20px; 
-        }
-        .plyr--video { 
-            height: 100%; 
-            width: 100%; 
-        }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; display: flex; justify-content: center; align-items: center; }
+        #container { width: 100%; height: 100%; }
+        iframe { border: 0; width: 100%; height: 100%; }
+        #message { color: #ccc; font-size: 1.2em; text-align: center; padding: 20px; }
+        .plyr--video { height: 100%; width: 100%; }
     </style>
 </head>
 <body>
 
-    <div id="container">
-        <!-- প্লেয়ার বা iframe এখানে ডাইনামিকভাবে যোগ করা হবে -->
-    </div>
+    <div id="container"></div>
     
-    <!-- প্রয়োজনীয় জাভাস্ক্রিপ্ট লাইব্রেরি -->
     <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
     <script>
-        // Base64 ডিকোড করার একটি নিরাপদ ফাংশন যা ত্রুটি হ্যান্ডেল করতে পারে
+        // Base64 ডিকোড করার একটি নিরাপদ ফাংশন
         function safeB64Decode(str) {
             try {
-                // UTF-8 ক্যারেক্টার সঠিকভাবে ডিকোড করার জন্য
                 return decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
             } catch (e) {
                 console.error("Base64 decoding failed:", e);
@@ -62,85 +31,187 @@
             }
         }
 
-        // URL থেকে প্যারামিটার পাওয়ার জন্য
         const urlParams = new URLSearchParams(window.location.search);
-        const encodedSrc = urlParams.get('src'); // সরাসরি m3u8 লিঙ্কের জন্য
+        const encodedSrc = urlParams.get('src'); // .m3u8 লিঙ্কের জন্য
         const encodedIframeSrc = urlParams.get('iframe_src'); // iframe লিঙ্কের জন্য
+        const encodedRef = urlParams.get('ref'); // <-- নতুন Referrer প্যারামিটার
 
         const container = document.getElementById('container');
 
-        // ব্যবহারকারীকে মেসেজ দেখানোর জন্য একটি ফাংশন
         function showMessage(htmlContent) {
             container.innerHTML = `<div id="message">${htmlContent}</div>`;
         }
         
-        // --- মূল যুক্তি ---
         document.addEventListener('DOMContentLoaded', () => {
             if (encodedSrc) {
-                // --- .m3u8 লিঙ্ক চালানোর যুক্তি ---
+                // --- .m3u8 লিঙ্ক চালানোর চূড়ান্ত যুক্তি ---
                 const source = safeB64Decode(encodedSrc);
                 if (source) {
                     container.innerHTML = `<video id="player" playsinline controls></video>`;
                     const video = document.getElementById('player');
 
                     if (Hls.isSupported()) {
-                        const hls = new Hls({
-                            // নেটওয়ার্ক বা মিডিয়া সম্পর্কিত ত্রুটি হলে hls.js রিকভার করার চেষ্টা করবে
-                             enableWorker: true,
-                             fragLoadingMaxRetry: 4,
-                             manifestLoadingMaxRetry: 2,
-                        });
+                        const hlsConfig = {}; // HLS কনফিগারেশন অবজেক্ট
+                        
+                        // **সবচেয়ে গুরুত্বপূর্ণ আপডেট:**
+                        // যদি ref প্যারামিটার থাকে, তবে hls.js-কে সেই Referrer ব্যবহার করতে বলা হচ্ছে
+                        if (encodedRef) {
+                            const decodedRef = safeB64Decode(encodedRef);
+                            if (decodedRef) {
+                                console.log("Using custom Referer:", decodedRef);
+                                hlsConfig.xhrSetup = function (xhr, url) {
+                                    xhr.setRequestHeader('Referer', decodedRef);
+                                };
+                            }
+                        }
+
+                        const hls = new Hls(hlsConfig);
                         hls.loadSource(source);
                         hls.attachMedia(video);
-                        // HLS.js-এর জন্য উন্নত ত্রুটি ব্যবস্থাপনা
-                        hls.on(Hls.Events.ERROR, function (event, data) {
+
+                        hls.on(Hls.Events.ERROR, (event, data) => {
                             if (data.fatal) {
                                 console.error('Fatal HLS Error:', data);
-                                switch(data.type) {
-                                    case Hls.ErrorTypes.NETWORK_ERROR:
-                                        showMessage(`Error loading video stream.<br>Details: ${data.details}. Please check the link and your connection.`);
-                                        break;
-                                    case Hls.ErrorTypes.MEDIA_ERROR:
-                                        showMessage(`Error with video content.<br>This stream might be corrupted or unsupported.`);
-                                        hls.recoverMediaError();
-                                        break;
-                                    default:
-                                        showMessage(`An unknown error occurred while loading the video.`);
-                                        break;
+                                if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.details === 'manifestLoadError') {
+                                    showMessage(`Network Error: Could not load the video manifest.<br>The server may be down or blocking the request.<br>Try using the 'Powered-up Link' if you aren't already.`);
+                                } else {
+                                    showMessage(`An error occurred while loading the video.<br>Type: ${data.type}`);
                                 }
                             }
                         });
+                        
+                        const player = new Plyr(video, { autoplay: true });
                     }
-                    // Plyr.io প্লেয়ার চালু করা
-                    const player = new Plyr(video, { autoplay: true });
                 } else {
-                    showMessage('Error: Invalid video source link. Could not decode.');
+                    showMessage('Error: Invalid video source link.');
                 }
 
             } else if (encodedIframeSrc) {
-                // --- iFrame লিঙ্ক চালানোর যুক্তি ---
+                // --- iFrame লিঙ্ক চালানোর যুক্তি (এটি অপরিবর্তিত) ---
                 const iframeSrc = safeB64Decode(encodedIframeSrc);
                 if (iframeSrc) {
                     const iframe = document.createElement('iframe');
                     iframe.src = iframeSrc;
                     iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
                     iframe.setAttribute('allowfullscreen', 'true');
-                    
-                    // **সবচেয়ে গুরুত্বপূর্ণ ফিচার:** Referrer Policy
-                    // এটি স্ট্রিমিং সার্ভারকে জানতে দেয় না যে অনুরোধটি কোথা থেকে আসছে, যা ব্লক হওয়া থেকে বাঁচায়।
                     iframe.setAttribute('referrerpolicy', 'no-referrer'); 
-                    
-                    // **সবচেয়ে শক্তিশালী স্যান্ডবক্স:**
-                    // এটি নিরাপত্তা দেয় কিন্তু fullscreen, pop-up এবং স্ক্রিপ্টের মতো প্রয়োজনীয় জিনিসগুলোকেও কাজ করতে দেয়।
                     iframe.setAttribute('sandbox', 'allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation allow-presentation allow-popups');
-                    
                     container.appendChild(iframe);
                 } else {
-                    showMessage('Error: Invalid iframe source link. Could not decode.');
+                    showMessage('Error: Invalid iframe source link.');
                 }
 
             } else {
-                showMessage('No stream source found.<br>Please provide a "src" or "iframe_src" parameter in the URL.');
+                showMessage('No stream source found.<br>Please provide a valid link parameter.');
+            }
+        });
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Live Player v4 - Powered-up</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background-color: #000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; display: flex; justify-content: center; align-items: center; }
+        #container { width: 100%; height: 100%; }
+        iframe { border: 0; width: 100%; height: 100%; }
+        #message { color: #ccc; font-size: 1.2em; text-align: center; padding: 20px; }
+        .plyr--video { height: 100%; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <div id="container"></div>
+    
+    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    <script>
+        // Base64 ডিকোড করার একটি নিরাপদ ফাংশন
+        function safeB64Decode(str) {
+            try {
+                return decodeURIComponent(atob(str).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+            } catch (e) {
+                console.error("Base64 decoding failed:", e);
+                return null;
+            }
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const encodedSrc = urlParams.get('src'); // .m3u8 লিঙ্কের জন্য
+        const encodedIframeSrc = urlParams.get('iframe_src'); // iframe লিঙ্কের জন্য
+        const encodedRef = urlParams.get('ref'); // <-- নতুন Referrer প্যারামিটার
+
+        const container = document.getElementById('container');
+
+        function showMessage(htmlContent) {
+            container.innerHTML = `<div id="message">${htmlContent}</div>`;
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            if (encodedSrc) {
+                // --- .m3u8 লিঙ্ক চালানোর চূড়ান্ত যুক্তি ---
+                const source = safeB64Decode(encodedSrc);
+                if (source) {
+                    container.innerHTML = `<video id="player" playsinline controls></video>`;
+                    const video = document.getElementById('player');
+
+                    if (Hls.isSupported()) {
+                        const hlsConfig = {}; // HLS কনফিগারেশন অবজেক্ট
+                        
+                        // **সবচেয়ে গুরুত্বপূর্ণ আপডেট:**
+                        // যদি ref প্যারামিটার থাকে, তবে hls.js-কে সেই Referrer ব্যবহার করতে বলা হচ্ছে
+                        if (encodedRef) {
+                            const decodedRef = safeB64Decode(encodedRef);
+                            if (decodedRef) {
+                                console.log("Using custom Referer:", decodedRef);
+                                hlsConfig.xhrSetup = function (xhr, url) {
+                                    xhr.setRequestHeader('Referer', decodedRef);
+                                };
+                            }
+                        }
+
+                        const hls = new Hls(hlsConfig);
+                        hls.loadSource(source);
+                        hls.attachMedia(video);
+
+                        hls.on(Hls.Events.ERROR, (event, data) => {
+                            if (data.fatal) {
+                                console.error('Fatal HLS Error:', data);
+                                if (data.type === Hls.ErrorTypes.NETWORK_ERROR && data.details === 'manifestLoadError') {
+                                    showMessage(`Network Error: Could not load the video manifest.<br>The server may be down or blocking the request.<br>Try using the 'Powered-up Link' if you aren't already.`);
+                                } else {
+                                    showMessage(`An error occurred while loading the video.<br>Type: ${data.type}`);
+                                }
+                            }
+                        });
+                        
+                        const player = new Plyr(video, { autoplay: true });
+                    }
+                } else {
+                    showMessage('Error: Invalid video source link.');
+                }
+
+            } else if (encodedIframeSrc) {
+                // --- iFrame লিঙ্ক চালানোর যুক্তি (এটি অপরিবর্তিত) ---
+                const iframeSrc = safeB64Decode(encodedIframeSrc);
+                if (iframeSrc) {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = iframeSrc;
+                    iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+                    iframe.setAttribute('allowfullscreen', 'true');
+                    iframe.setAttribute('referrerpolicy', 'no-referrer'); 
+                    iframe.setAttribute('sandbox', 'allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation allow-presentation allow-popups');
+                    container.appendChild(iframe);
+                } else {
+                    showMessage('Error: Invalid iframe source link.');
+                }
+
+            } else {
+                showMessage('No stream source found.<br>Please provide a valid link parameter.');
             }
         });
     </script>
